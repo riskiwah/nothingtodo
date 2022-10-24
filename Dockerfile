@@ -1,6 +1,7 @@
-FROM balenalib/armv7hf-alpine-golang:1.18-3.15 as builder
+# FROM balenalib/armv7hf-alpine-golang:1.18-3.15 as builder
+FROM golang:1.18-alpine as builder
 
-RUN apk --no-cache add build-base git mercurial gcc
+RUN apk --no-cache add git
 WORKDIR /nothingtodo
 ADD . /nothingtodo
 RUN go mod download
