@@ -6,7 +6,7 @@
     <meta property="og:title" content="~/riskiwah">
     <link rel="canonical" href="https://riskiwah.xyz">
     <link rel="shortcut icon" type="image/png"
-        href="https://emojipedia-us.s3.dualstack.us-west-1.amazonaws.com/thumbs/120/google/274/bear_1f43b.png">
+        href="favicon.png">
     <title>~/riskiwah</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -57,7 +57,7 @@
         <hr>
         <footer>
             <small>© 2021 <a href="mailto:riskiwah@yandex.com">~/riskiwah</a> · <em>Generated at:
-                    <time timestamp="Mon Oct 24 08:26:13 PM WIB 2022">Mon Oct 24 08:26:13 PM WIB 2022</time> · Commit: 3504d49</em>
+                    <time timestamp="{{.Timestamp}}">{{.FormattedTime}}</time> · Commit: {{ .CommitHash }}</em>
             </small>
         </footer>
     </div>

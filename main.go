@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
@@ -13,8 +14,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/shirou/gopsutil/host"
+	"github.com/shirou/gopsutil/v3/host"
 )
+
+// todo! add -ldflags (build time)
+// references: https://blog.alexellis.io/inject-build-time-vars-golang/
+var (
+	//go:embed all:static
+	staticFiles embed.FS
+	commit      string
+)
+
+type TemplateInject struct {
+	Timestamp     time.Time
+	FormattedTime string
+	CommitHash    string
+}
 
 type Stats struct {
 	Hostname      string `json:"hostname"`
@@ -24,42 +39,35 @@ type Stats struct {
 	KernelArch    string `json:"kernelArch"`
 }
 
-// todo! add -ldflags (build time)
-// references: https://blog.alexellis.io/inject-build-time-vars-golang/
-var (
-	//go:embed all:static
-	staticFiles embed.FS
-
-	buildTime string
-	commit    string
-)
-
-// type RenderTemplate struct {
-// 	templ *template.Template
-// }
-
 // todo! add dynamic path after /pprof/{goroutine,heap,allocs,etcetc}
 // with switch case maybe (?)
 type profiles string
 
-// func formatDate(timeStamp time.Time) string {
-// 	return timeStamp.Format("01-02-2006")
-// }
+func renderTemplate() TemplateInject {
+	return TemplateInject{
+		Timestamp:     time.Now(),
+		FormattedTime: time.Now().Format("Mon Jan 02 03:04:05 PM MST 2006"),
+		CommitHash:    commit,
+	}
+}
 
-// func render() (*RenderTemplate, error) {
-// 	templ, err := template.ParseFS(staticFiles, "templates/*.gohtml")
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return &RenderTemplate{templ: templ}, nil
-// }
-
-func handleStatic() http.Handler {
+func handleStatic(tpl *template.Template) http.Handler {
 	rootFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		log.Printf("Error: Failed to load FS: %v", err)
 	}
-	return http.FileServer(http.FS(rootFS))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			rendering := renderTemplate()
+			err := tpl.Execute(w, rendering)
+			if err != nil {
+				log.Printf("Error rendering template: %v", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+			return
+		}
+		http.FileServer(http.FS(rootFS)).ServeHTTP(w, r)
+	})
 }
 
 func handlePprof(w http.ResponseWriter, req *http.Request) {
@@ -124,11 +132,17 @@ func gracefulShutdown(server *http.Server, timeout time.Duration) error {
 	return <-done
 }
 
+// main function
 func main() {
 	router := http.NewServeMux()
 
+	tpl, err := template.ParseFS(staticFiles, "static/index.html")
+	if err != nil {
+		log.Fatalf("Error parsing template: %s", err)
+	}
+
 	// handler
-	router.Handle("/", handleStatic())
+	router.Handle("/", handleStatic(tpl))
 	router.HandleFunc("/pprof", handlePprof)
 	router.HandleFunc("/status", handleStatus)
 
