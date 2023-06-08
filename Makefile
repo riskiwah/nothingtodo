@@ -1,6 +1,12 @@
 MAIN_BIN=nothingtodo
 BUILD_DIR=./dist
-FLAGS=-v -ldflags="-X main.commit=`git rev-parse --short HEAD`"
+COMMIT_HASH=$(shell git rev-parse --short HEAD)
+BUILD_TIMESTAMP=$(shell date '+%Y-%m-%dT%H:%M:%S')
+YEAR=$(shell date '+%Y')
+
+LDFLAGS := -s -w -v -X 'main.commit=$(COMMIT_HASH)' \
+		   -X 'main.buildTimestamp=$(BUILD_TIMESTAMP)' \
+		   -X 'main.year=$(YEAR)'
 
 .PHONY: help
 help:  ## Show help
@@ -10,7 +16,7 @@ clean: ## clean build
 	@rm $(BUILD_DIR)/$(MAIN_BIN)
 
 build: ## build binary
-	@CGO_ENABLED=0 go build $(FLAGS) -o dist/nothingtodo main.go
+	@CGO_ENABLED=0 go build -gcflags=all="-l -B -C" -ldflags="$(LDFLAGS)" -o dist/nothingtodo main.go
 
 run: ## run binary
 	$(BUILD_DIR)/$(MAIN_BIN)

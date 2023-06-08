@@ -7,29 +7,39 @@
 */
 img {
     max-width: 100%;
-    height: auto
+    height: auto;
 }
 
 body {
-    background-color: #fcfaf5;
-    font: sans-serif;
-    max-width: 70ch;
-    padding: 0 1em;
-    margin: 0 auto;
+    font-family: Verdana,sans-serif;
+    margin: auto;
+    padding: 20px;
+    max-width: 720px;
+    text-align: left;
+    background-color: #1d1f27;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
     line-height: 1.5;
-    font-size: 1.25em;
+    color: #c9d1d9;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale
+    -moz-osx-font-smoothing: grayscale;
 }
 
 code {
     font-family: monospace;
+    padding: 2px 5px;
+    color: #f8f8f2;
+    background-color: #282a36
 }
 
 h1,
 h2 {
     margin: 1.25em 0 0.5em 0;
     line-height: 1.2
+}
+
+a {
+    color: #8cc2dd
 }
 
 footer {

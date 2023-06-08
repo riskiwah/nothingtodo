@@ -21,14 +21,18 @@ import (
 // references: https://blog.alexellis.io/inject-build-time-vars-golang/
 var (
 	//go:embed all:static
-	staticFiles embed.FS
-	commit      string
+	staticFiles    embed.FS
+	commit         string
+	buildTimestamp string
+	year           string
 )
 
 type TemplateInject struct {
-	Timestamp     time.Time
-	FormattedTime string
-	CommitHash    string
+	// Timestamp     time.Time
+	// FormattedTime string
+	BuildTimestamp string
+	CommitHash     string
+	Year           string
 }
 
 type Stats struct {
@@ -41,13 +45,13 @@ type Stats struct {
 
 // todo! add dynamic path after /pprof/{goroutine,heap,allocs,etcetc}
 // with switch case maybe (?)
-type profiles string
+// type profiles string
 
 func renderTemplate() TemplateInject {
 	return TemplateInject{
-		Timestamp:     time.Now(),
-		FormattedTime: time.Now().Format("Mon Jan 02 03:04:05 PM MST 2006"),
-		CommitHash:    commit,
+		BuildTimestamp: buildTimestamp,
+		CommitHash:     commit,
+		Year:           year,
 	}
 }
 
