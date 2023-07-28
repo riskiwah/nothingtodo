@@ -1,8 +1,7 @@
 # pre build
 FROM tdewolff/minify:latest as pre
 
-# FROM balenalib/armv7hf-alpine-golang:1.18-3.15 as builder
-FROM golang:1.19-alpine as builder
+FROM golang:1.19.11-alpine3.18 as builder
 RUN apk --no-cache add git make
 COPY --from=pre /usr/bin/minify /usr/bin/minify
 WORKDIR /nothingtodo
