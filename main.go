@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"embed"
-	"encoding/json"
 	"html/template"
 	"io/fs"
 	"log"
@@ -27,7 +26,12 @@ var (
 	year           string
 )
 
-type TemplateInject struct {
+type TemplateData struct {
+	Footer Footer
+	Stats  Stats
+}
+
+type Footer struct {
 	// Timestamp     time.Time
 	// FormattedTime string
 	BuildTimestamp string
@@ -36,23 +40,34 @@ type TemplateInject struct {
 }
 
 type Stats struct {
-	Hostname      string `json:"hostname"`
-	Uptime        string `json:"uptime"`
-	Platform      string `json:"platform"`
-	KernelVersion string `json:"kernelVersion"`
-	KernelArch    string `json:"kernelArch"`
+	Hostname      string
+	Uptime        string
+	KernelVersion string
+	KernelArch    string
 }
 
 // todo! add dynamic path after /pprof/{goroutine,heap,allocs,etcetc}
 // with switch case maybe (?)
 // type profiles string
 
-func renderTemplate() TemplateInject {
-	return TemplateInject{
+func renderTemplate(stats Stats) (TemplateData, error) {
+	stats, err := getStatus()
+	if err != nil {
+		return TemplateData{}, err
+	}
+
+	footer := Footer{
 		BuildTimestamp: buildTimestamp,
 		CommitHash:     commit,
 		Year:           year,
 	}
+
+	templateData := TemplateData{
+		Stats:  stats,
+		Footer: footer,
+	}
+
+	return templateData, nil
 }
 
 func handleStatic(tpl *template.Template) http.Handler {
@@ -62,8 +77,13 @@ func handleStatic(tpl *template.Template) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
-			rendering := renderTemplate()
-			err := tpl.Execute(w, rendering)
+			rendering, err := renderTemplate(Stats{})
+			if err != nil {
+				log.Printf("Error rendering template: %v", err)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+			err = tpl.Execute(w, rendering)
 			if err != nil {
 				log.Printf("Error rendering template: %v", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -83,30 +103,20 @@ func handlePprof(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func handleStatus(w http.ResponseWriter, req *http.Request) {
+func getStatus() (Stats, error) {
 	stats, err := host.Info()
 	if err != nil {
-		log.Printf("Error: Failed to get status: %v", err)
+		return Stats{}, err
 	}
 
 	convertTime := time.Duration(stats.Uptime) * time.Second
 
-	statsData := Stats{
+	return Stats{
 		Hostname:      stats.Hostname,
 		Uptime:        convertTime.String(),
-		Platform:      stats.Platform,
 		KernelVersion: stats.KernelVersion,
 		KernelArch:    stats.KernelArch,
-	}
-
-	marshalJson, err := json.Marshal(statsData)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(marshalJson)
+	}, nil
 }
 
 func gracefulShutdown(server *http.Server, timeout time.Duration) error {
@@ -148,7 +158,6 @@ func main() {
 	// handler
 	router.Handle("/", handleStatic(tpl))
 	router.HandleFunc("/pprof", handlePprof)
-	router.HandleFunc("/status", handleStatus)
 
 	server := &http.Server{
 		Addr:        ":8080",

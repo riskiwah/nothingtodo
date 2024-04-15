@@ -2,8 +2,8 @@
  Inspired: 
  - https://gist.github.com/JoeyBurzynski/617fb6201335779f8424ad9528b72c41
  - https://t.mkws.sh/
- - https: //github.com/susam/10kbclub/blob/main/src/template.html
- - https: //github.com/tdewolff/minify/tree/master/cmd/minify
+ - https://github.com/susam/10kbclub/blob/main/src/template.html
+ - https://github.com/tdewolff/minify/tree/master/cmd/minify
 */
 img {
     max-width: 100%;
@@ -25,11 +25,17 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-code {
+:not(pre) code {
     font-family: monospace;
     padding: 2px 5px;
-    color: #f8f8f2;
-    background-color: #282a36
+    color: #a5d6ff;
+    background-color: #282a36;
+    white-space: pre-wrap;
+}
+
+pre {
+    padding: .5rem;
+    background-color: #282a36;
 }
 
 h1,

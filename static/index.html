@@ -15,43 +15,39 @@
     <div class="container">
         <h1 id="riskiwah">~/riskiwah</h1>
         <hr>
-        <p>
-            Hi, Welcome
-        </p>
-        <p>
-            Thank you for accessing this page <a href="#menu">Menu ↩</a>.
-        </p>
-        <p>
-            It&#39;s just simple web that build up with purely <code>HTML and CSS</code>.
-        </p>
-
+        <p>Hi, Welcome</p>
+        <p>Thank you for accessing this page <a href="#menu">Menu ↩</a>.</p>
+        <p>It&#39;s just simple web that build up with purely <code>HTML and CSS</code>.</p>
         <h2>Hosted from this <em>little machine</em> Orange Pi Zero 2</h2>
         <img src="images/opizero2.png" loading="lazy">
+        <h2 id="status">Status</h2>
+        <pre tabindex="0" class="uptime">
+{
+  "hostname": "{{ .Stats.Hostname }}",
+  "uptime": "{{ .Stats.Uptime }}",
+  "kernel_arch": "{{ .Stats.KernelArch }}",
+  "kernel_version": "{{ .Stats.KernelVersion }}"
+}</pre>
+        <h2 id="menu">Menu</h2>
         <p>
-            <b>*) A new <em>little machine</em> is up!</b>
-        </p>
-        <p>
-            <b>**) Please dont DDoS'ed or something that make my <em>little machine</em> really overwhelmed...</b>
-        </p>
-        <p>
-            <b><s>*) As of April 22, 2023, my Raspberry Pi was broken and currently run top of an<code>amd64</code> based machine </s></b>
-        </p>
-        <h2 id="menu">Menu:</h2>
-        <p>
-            <li><a href="https://blog.riskiwah.xyz/" target="_blank">Blog</a></li>
-            <li><a href="https://portfolio.pixelfed.social/riskiwah" target="_blank">Photos</a></li>
-            <li><a href="https://pub.riskiwah.xyz/" target="_blank">Public</a></li>
-            <li><a href="/ip" target="_blank">/ip</a></li>
-            <li><a href="/status" target="_blank">/status</a></li>
-            <li><a href="/pprof" target="_blank">/pprof</a></li>
+            <ul>
+                <li><a href="https://blog.riskiwah.xyz/" target="_blank">blog</a></li>
+                <li><a href="https://portfolio.pixelfed.social/riskiwah" target="_blank">photos</a></li>
+                <li><a href="https://pub.riskiwah.xyz/" target="_blank">public</a></li>
+                <li><a href="/ip" target="_blank">/ip</a></li>
+                <li><a href="/pprof" target="_blank">/pprof</a></li>
+            </ul>
         </p>
         <h4 id="inspiration">Inspiration of this site</h4>
-            <li><a href="https://solar.lowtechmagazine.com/" target="_blank"
-                rel="noopener noreferrer">solar.lowtechmagazine.com</a></li>
-            <li><a href="https://1mb.club/" target="_blank" rel="noopener noreferrer">1mb.club</a></li>
-            <li><a href="https://motherfuckingwebsite.com/" target="_blank" rel="noopener noreferrer">motherfuckingwebsite.com</a></li>
-            <li><a href="https://bestmotherfucking.website/" target="_blank"
-                rel="noopener noreferrer">bestmotherfucking.website</a></li>
+            <ul>
+                <li><a href="https://solar.lowtechmagazine.com/" target="_blank"
+                    rel="noopener noreferrer">solar.lowtechmagazine.com</a></li>
+                <li><a href="https://solar.yohanes.mobi/" target="_blank" rel="noopener noreferrer">solar.yohanes.mobi</a></li>
+                <li><a href="https://1mb.club/" target="_blank" rel="noopener noreferrer">1mb.club</a></li>
+                <li><a href="https://motherfuckingwebsite.com/" target="_blank" rel="noopener noreferrer">motherfuckingwebsite.com</a></li>
+                <li><a href="https://bestmotherfucking.website/" target="_blank"
+                    rel="noopener noreferrer">bestmotherfucking.website</a></li>
+            </ul>
         <p>
             May you can check the <code>console developer tools</code>,
             and see how it's fun.
@@ -61,8 +57,8 @@
         </script>
         <hr>
         <footer>
-            <small>© {{.Year}} <a href="mailto:riskiwah@yandex.com">~/riskiwah</a> · <em>Generated at:
-                    <time timestamp="{{.BuildTimestamp}}">{{.BuildTimestamp}}</time> · Commit: {{ .CommitHash }}</em>
+            <small>© {{.Footer.Year}} <a href="mailto:riskiwah@yandex.com">~/riskiwah</a> · <em>Generated at:
+                    <time timestamp="{{.Footer.BuildTimestamp}}">{{.Footer.BuildTimestamp}}</time> · Commit: {{ .Footer.CommitHash }}</em>
             </small>
         </footer>
     </div>
