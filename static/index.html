@@ -9,25 +9,20 @@
         href="favicon.ico">
     <title>~/riskiwah</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/htmx.org@2.0.8"></script>
 </head>
 
 <body>
     <div class="container">
         <h1 id="riskiwah">~/riskiwah</h1>
         <hr>
-        <p>Hi, Welcome</p>
-        <p>Thank you for accessing this page <a href="#menu">Menu ↩</a>.</p>
-        <p>It&#39;s just simple web that build up with purely <code>HTML and CSS</code>.</p>
-        <h2>Hosted from this <em>little machine</em> Orange Pi Zero 2</h2>
+        <p><strong>Hi, and welcome!</strong></p>
+        <p>Thanks for visting this page. Browse around using the <a href="#menu">Menu ↩</a>.</p>
+        <p>This is a rather empty site, for now.</p>
+        <h2>Hosted from this small <em>"Orange Pi Zero 2"</em></h2>
         <img src="images/opizero2.png" loading="lazy">
         <h2 id="status">Status</h2>
-        <pre tabindex="0" class="uptime">
-{
-  "hostname": "{{ .Stats.Hostname }}",
-  "uptime": "{{ .Stats.Uptime }}",
-  "kernel_arch": "{{ .Stats.KernelArch }}",
-  "kernel_version": "{{ .Stats.KernelVersion }}"
-}</pre>
+        <pre id="uptime-status" tabindex="1" class="uptime" hx-get="/status-fragment" hx-trigger="load, every 60s" hx-swap="outerHTML">{{ .StatusJSON }}</pre>
         <h2 id="menu">Menu</h2>
         <p>
             <ul>
@@ -48,10 +43,9 @@
                 <li><a href="https://bestmotherfucking.website/" target="_blank"
                     rel="noopener noreferrer">bestmotherfucking.website</a></li>
             </ul>
-        <p>
-            May you can check the <code>console developer tools</code>,
-            and see how it's fun.
-        </p>
+        <p><strong>
+            You’ve reached the bottom. There’s nothing more to see… or is there?
+        </strong></p>
         <script>
             console.log("Booo!!, I Hack'ed u! 🐻")
         </script>
