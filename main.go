@@ -10,31 +10,22 @@ import (
 	"io"
 	"io/fs"
 	"log"
-	"math"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime/pprof"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/shirou/gopsutil/v3/host"
 )
 
 var (
 	//go:embed all:static
-	staticFiles  embed.FS
-	weatherCache struct {
-		Location    string
-		Temperature int
-		Condition   string
-		Humidity    int
-		Updated     time.Time
-	}
+	staticFiles    embed.FS
+	weatherCache   weatherData
 	weatherMu      sync.RWMutex
 	commit         string
 	buildTimestamp string
@@ -73,6 +64,21 @@ type wttrResponse struct {
 	} `json:"current_condition"`
 }
 
+type weatherData struct {
+	Location    string    `json:"location"`
+	Temperature int       `json:"temperature"`
+	Condition   string    `json:"condition"`
+	Humidity    int       `json:"humidity"`
+	Updated     time.Time `json:"updated"`
+}
+
+type WeatherInfo struct {
+	Location    string `json:"location"`
+	Temperature int    `json:"temperature"`
+	Condition   string `json:"condition"`
+	Humidity    int    `json:"humidity"`
+}
+
 type KernelInfo struct {
 	Arch    string `json:"arch"`
 	Version string `json:"version"`
@@ -85,13 +91,8 @@ type HostEntry struct {
 }
 
 type StatusJSON struct {
-	Host    []HostEntry `json:"host"`
-	Weather struct {
-		Location    string `json:"location"`
-		Temperature int    `json:"temperature"`
-		Condition   string `json:"condition"`
-		Humidity    int    `json:"humidity"`
-	} `json:"weather"`
+	Host    HostEntry   `json:"host"`
+	Weather WeatherInfo `json:"weather"`
 }
 
 const (
@@ -105,11 +106,9 @@ func formatUptime(seconds uint64) string {
 	if seconds == 0 {
 		return "just booted"
 	}
-	d := time.Duration(seconds) * time.Second
-
-	days := int(math.Floor(d.Hours() / 24))
-	hours := int(math.Floor(d.Hours())) % 24
-	mins := int(math.Floor(d.Minutes())) % 60
+	days := int(seconds / 86400)
+	hours := int(seconds % 86400 / 3600)
+	mins := int(seconds % 3600 / 60)
 
 	var parts []string
 	if days > 0 {
@@ -140,7 +139,10 @@ func fetchWeatherFromAPI() (string, int, string, int, error) {
 	var err error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		req, _ := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return "", 0, "", 0, fmt.Errorf("failed to build request: %w", err)
+		}
 		req.Header.Set("User-Agent", "curl/8.4.0")
 
 		resp, err = httpClient.Do(req)
@@ -153,7 +155,7 @@ func fetchWeatherFromAPI() (string, int, string, int, error) {
 		}
 
 		if attempt < maxRetries {
-			sleep := time.Duration(math.Pow(2, float64(attempt-1))) * time.Second
+			sleep := time.Duration(1<<uint(attempt-1)) * time.Second
 			log.Printf("Weather fetch attempt %d/%d failed: %v – retrying in %s", attempt, maxRetries, err, sleep)
 			time.Sleep(sleep)
 		}
@@ -204,25 +206,14 @@ func loadWeatherCache() bool {
 		return false
 	}
 
-	var cached struct {
-		Location    string    `json:"location"`
-		Temperature int       `json:"temperature"`
-		Condition   string    `json:"condition"`
-		Humidity    int       `json:"humidity"`
-		Updated     time.Time `json:"updated"`
-	}
-
+	var cached weatherData
 	if err := json.Unmarshal(data, &cached); err != nil {
 		log.Printf("Corrupt weather cache file – ignoring: %v", err)
 		return false
 	}
 
 	weatherMu.Lock()
-	weatherCache.Location = cached.Location
-	weatherCache.Temperature = cached.Temperature
-	weatherCache.Condition = cached.Condition
-	weatherCache.Humidity = cached.Humidity
-	weatherCache.Updated = cached.Updated
+	weatherCache = cached
 	weatherMu.Unlock()
 
 	age := time.Since(cached.Updated)
@@ -245,19 +236,7 @@ func saveWeatherCache() error {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
 
-	cached := struct {
-		Location    string    `json:"location"`
-		Temperature int       `json:"temperature"`
-		Condition   string    `json:"condition"`
-		Humidity    int       `json:"humidity"`
-		Updated     time.Time `json:"updated"`
-	}{
-		Location:    weatherCache.Location,
-		Temperature: weatherCache.Temperature,
-		Condition:   weatherCache.Condition,
-		Humidity:    weatherCache.Humidity,
-		Updated:     weatherCache.Updated,
-	}
+	cached := weatherCache
 
 	jsonBytes, err := json.MarshalIndent(cached, "", "  ")
 	if err != nil {
@@ -320,6 +299,20 @@ func getWeather() (string, int, string, int, error) {
 	return weatherCache.Location, weatherCache.Temperature, weatherCache.Condition, weatherCache.Humidity, nil
 }
 
+func formatStatus(s StatusJSON) string {
+	return fmt.Sprintf(
+		"  hostname  →  %s\n  arch      →  %s\n  kernel    →  %s\n  uptime    →  %s\n\n  location  →  %s\n  weather   →  %s\n  temp      →  %d°C  ·  humidity %d%%",
+		s.Host.Hostname,
+		s.Host.Kernel.Arch,
+		s.Host.Kernel.Version,
+		s.Host.Uptime,
+		s.Weather.Location,
+		s.Weather.Condition,
+		s.Weather.Temperature,
+		s.Weather.Humidity,
+	)
+}
+
 func handleStatic(tpl, fragmentTpl *template.Template) http.HandlerFunc {
 	rootFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -335,27 +328,12 @@ func handleStatic(tpl, fragmentTpl *template.Template) http.HandlerFunc {
 
 		switch r.URL.Path {
 		case "/":
-			status := getStatusJSON()
-			jsonBytes, _ := json.MarshalIndent(status, "", "  ")
-
 			data := struct {
 				StatusJSON template.HTML
-				Footer     struct {
-					BuildTimestamp string
-					CommitHash     string
-					Year           string
-				}
+				Footer     Footer
 			}{
-				StatusJSON: template.HTML(jsonBytes),
-				Footer: struct {
-					BuildTimestamp string
-					CommitHash     string
-					Year           string
-				}{
-					BuildTimestamp: buildTimestamp,
-					CommitHash:     commit,
-					Year:           year,
-				},
+				StatusJSON: template.HTML(formatStatus(getStatusJSON())),
+				Footer:     Footer{BuildTimestamp: buildTimestamp, CommitHash: commit, Year: year},
 			}
 
 			w.Header().Set("Cache-Control", "no-store")
@@ -365,16 +343,11 @@ func handleStatic(tpl, fragmentTpl *template.Template) http.HandlerFunc {
 			}
 
 		case "/status-fragment":
-			status := getStatusJSON()
-			jsonBytes, err := json.MarshalIndent(status, "", "  ")
-			if err != nil {
-				http.Error(w, "JSON marshal error", http.StatusInternalServerError)
-				return
-			}
-
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fragmentTpl.Execute(w, template.HTML(jsonBytes))
+			if err := fragmentTpl.Execute(w, template.HTML(formatStatus(getStatusJSON()))); err != nil {
+				log.Printf("Fragment template error: %v", err)
+			}
 
 		default:
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -383,43 +356,57 @@ func handleStatic(tpl, fragmentTpl *template.Template) http.HandlerFunc {
 	}
 }
 
-func handlePprof(w http.ResponseWriter, req *http.Request) {
-	getPprof := pprof.Lookup("heap")
-	err := getPprof.WriteTo(w, 1)
-	if err != nil {
-		log.Printf("Error: Failed to write pprof: %v", err)
+func handlePprof(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprintln(w, `you found nothing.
+this machine runs on caffeine and stubbornness.
+
+    [Orange Pi Zero 2]
+    ┌──────────────┐
+    │  ◉ ◉ ◉ ◉     │  <- LEDs go brrr
+    │   ARM64      │
+    │   1GB RAM    │
+    └──────────────┘
+
+go back: /`)
+}
+
+func readHostInfo() (hostname, kernelVersion string, uptimeSecs uint64) {
+	hostname, _ = os.Hostname()
+
+	if data, err := os.ReadFile("/proc/version"); err == nil {
+		if fields := strings.Fields(string(data)); len(fields) >= 3 {
+			kernelVersion = fields[2]
+		}
 	}
+
+	if data, err := os.ReadFile("/proc/uptime"); err == nil {
+		if fields := strings.Fields(string(data)); len(fields) >= 1 {
+			if f, err := strconv.ParseFloat(fields[0], 64); err == nil {
+				uptimeSecs = uint64(f)
+			}
+		}
+	}
+
+	return
 }
 
 func getStatusJSON() StatusJSON {
-	info, err := host.Info()
-	if err != nil {
-		log.Printf("host.Info error: %v", err)
-		info = &host.InfoStat{}
-	}
-
-	uptimeStr := formatUptime(info.Uptime)
-	hostEntry := HostEntry{
-		Hostname: info.Hostname,
-		Uptime:   uptimeStr,
-	}
-	hostEntry.Kernel.Arch = info.KernelArch
-	hostEntry.Kernel.Version = info.KernelVersion
+	hostname, kernelVersion, uptimeSecs := readHostInfo()
 
 	status := StatusJSON{
-		Host: []HostEntry{hostEntry},
+		Host: HostEntry{
+			Hostname: hostname,
+			Uptime:   formatUptime(uptimeSecs),
+			Kernel:   KernelInfo{Arch: runtime.GOARCH, Version: kernelVersion},
+		},
 	}
 
 	loc, temp, cond, hum, err := getWeather()
 	if err != nil {
 		log.Printf("Weather fetch error (using empty): %v", err)
 	} else {
-		status.Weather = struct {
-			Location    string `json:"location"`
-			Temperature int    `json:"temperature"`
-			Condition   string `json:"condition"`
-			Humidity    int    `json:"humidity"`
-		}{loc, temp, cond, hum}
+		status.Weather = WeatherInfo{loc, temp, cond, hum}
 	}
 
 	return status

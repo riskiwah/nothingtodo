@@ -9,7 +9,6 @@
         href="favicon.ico">
     <title>~/riskiwah</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/htmx.org@2.0.8"></script>
 </head>
 
 <body>
@@ -20,9 +19,9 @@
         <p>Thanks for visting this page. Browse around using the <a href="#menu">Menu ↩</a>.</p>
         <p>This is a rather empty site, for now.</p>
         <h2>Hosted from this small <em>"Orange Pi Zero 2"</em></h2>
-        <img src="images/opizero2.png" loading="lazy">
+        <img src="images/opizero2-dither.png" loading="lazy">
         <h2 id="status">Status</h2>
-        <pre id="uptime-status" tabindex="1" class="uptime" hx-get="/status-fragment" hx-trigger="load, every 60s" hx-swap="outerHTML">{{ .StatusJSON }}</pre>
+        <pre id="uptime-status" tabindex="1" class="uptime">{{ .StatusJSON }}</pre>
         <h2 id="menu">Menu</h2>
         <p>
             <ul>
@@ -48,6 +47,11 @@
         </strong></p>
         <script>
             console.log("Booo!!, I Hack'ed u! 🐻")
+            setInterval(function() {
+                fetch('/status-fragment').then(function(r) { return r.text(); }).then(function(html) {
+                    document.getElementById('uptime-status').outerHTML = html;
+                });
+            }, 60000);
         </script>
         <hr>
         <footer>
