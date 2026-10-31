@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -14,6 +17,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -41,6 +46,11 @@ var httpClient = &http.Client{
 		IdleConnTimeout:       90 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 	},
+}
+
+type pageData struct {
+	StatusJSON string
+	Footer     Footer
 }
 
 type Footer struct {
@@ -135,38 +145,40 @@ func plural(n int) string {
 func fetchWeatherFromAPI() (string, int, string, int, error) {
 	url := "https://wttr.in/" + weatherLocation + "?format=j1"
 
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", 0, "", 0, fmt.Errorf("failed to build request: %w", err)
+	}
+	req.Header.Set("User-Agent", "curl/8.4.0")
+
+	// resp stays nil unless an attempt returned 200, so a network error on the
+	// last attempt can't fall through to a nil dereference.
 	var resp *http.Response
-	var err error
+	var lastErr error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return "", 0, "", 0, fmt.Errorf("failed to build request: %w", err)
-		}
-		req.Header.Set("User-Agent", "curl/8.4.0")
-
-		resp, err = httpClient.Do(req)
-		if err == nil && resp.StatusCode == http.StatusOK {
+		r, err := httpClient.Do(req)
+		if err == nil && r.StatusCode == http.StatusOK {
+			resp = r
 			break
 		}
 
-		if resp != nil {
-			resp.Body.Close()
+		if err == nil {
+			lastErr = fmt.Errorf("HTTP %d", r.StatusCode)
+			r.Body.Close()
+		} else {
+			lastErr = err
 		}
 
 		if attempt < maxRetries {
 			sleep := time.Duration(1<<uint(attempt-1)) * time.Second
-			log.Printf("Weather fetch attempt %d/%d failed: %v – retrying in %s", attempt, maxRetries, err, sleep)
+			log.Printf("Weather fetch attempt %d/%d failed: %v – retrying in %s", attempt, maxRetries, lastErr, sleep)
 			time.Sleep(sleep)
 		}
 	}
 
-	if err != nil {
-		return "", 0, "", 0, fmt.Errorf("failed after %d retries: %w", maxRetries, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return "", 0, "", 0, fmt.Errorf("HTTP %d after retries", resp.StatusCode)
+	if resp == nil {
+		return "", 0, "", 0, fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
 	}
 
 	defer resp.Body.Close()
@@ -313,7 +325,7 @@ func formatStatus(s StatusJSON) string {
 	)
 }
 
-func handleStatic(tpl, fragmentTpl *template.Template) http.HandlerFunc {
+func handleStatic(tpl *template.Template, csp string) http.HandlerFunc {
 	rootFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		log.Printf("Error: Failed to load FS: %v", err)
@@ -328,32 +340,56 @@ func handleStatic(tpl, fragmentTpl *template.Template) http.HandlerFunc {
 
 		switch r.URL.Path {
 		case "/":
-			data := struct {
-				StatusJSON template.HTML
-				Footer     Footer
-			}{
-				StatusJSON: template.HTML(formatStatus(getStatusJSON())),
+			data := pageData{
+				StatusJSON: formatStatus(getStatusJSON()),
 				Footer:     Footer{BuildTimestamp: buildTimestamp, CommitHash: commit, Year: year},
 			}
 
 			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Content-Security-Policy", csp)
 			if err := tpl.Execute(w, data); err != nil {
 				log.Printf("Template error: %v", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 			}
 
-		case "/status-fragment":
+		case "/status":
+			// Plain text + nosniff: the page assigns this via textContent, so nothing
+			// in the response can ever be interpreted as markup.
 			w.Header().Set("Cache-Control", "no-store")
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			if err := fragmentTpl.Execute(w, template.HTML(formatStatus(getStatusJSON()))); err != nil {
-				log.Printf("Fragment template error: %v", err)
-			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			io.WriteString(w, formatStatus(getStatusJSON()))
 
 		default:
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			// Directories are refused so FileServer can't list them (e.g. /images/).
+			info, err := fs.Stat(rootFS, strings.TrimPrefix(path.Clean(r.URL.Path), "/"))
+			if err != nil || info.IsDir() {
+				http.NotFound(w, r)
+				return
+			}
+			// Asset names carry no content hash, so a long/immutable cache would pin
+			// stale files in browsers and Cloudflare; styles.css is busted via ?v=commit.
+			w.Header().Set("Cache-Control", "public, max-age=86400")
 			fileServer.ServeHTTP(w, r)
 		}
 	}
+}
+
+var inlineScriptRe = regexp.MustCompile(`(?s)<script>(.*?)</script>`)
+
+// buildCSP hashes inline scripts at startup, so the hash always matches what's
+// served, including after the Docker build minifies the page. Inline scripts
+// must not contain template actions, or the hash would change per request.
+// script-src 'self' covers Cloudflare's same-origin email-decode script.
+func buildCSP(page []byte) string {
+	scriptSrc := "'self'"
+	for _, m := range inlineScriptRe.FindAllSubmatch(page, -1) {
+		sum := sha256.Sum256(m[1])
+		scriptSrc += " 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+	}
+	return "default-src 'none'; script-src " + scriptSrc +
+		"; style-src 'self'; img-src 'self'; connect-src 'self'" +
+		"; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 }
 
 func handlePprof(w http.ResponseWriter, _ *http.Request) {
@@ -475,10 +511,13 @@ func main() {
 		log.Fatalf("Error parsing template: %s", err)
 	}
 
-	fragmentTpl := template.Must(template.New("fragment").Parse(
-		`<pre id="uptime-status" tabindex="1" class="uptime">{{ . }}</pre>`))
+	// Hash the rendered page, not the file: html/template strips JS comments.
+	var page bytes.Buffer
+	if err := tpl.Execute(&page, pageData{}); err != nil {
+		log.Fatalf("Error rendering template for CSP: %s", err)
+	}
 
-	router.Handle("/", handleStatic(tpl, fragmentTpl))
+	router.Handle("/", handleStatic(tpl, buildCSP(page.Bytes())))
 	router.HandleFunc("/pprof", handlePprof)
 
 	server := &http.Server{
