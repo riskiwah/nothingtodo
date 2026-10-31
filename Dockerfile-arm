@@ -1,14 +1,14 @@
 # pre build
 FROM riskiwah/tdewolff-minify:latest as pre
 
-FROM golang:1.23.3-alpine3.20 as builder
+FROM golang:1.27.3-alpine3.24 as builder
 RUN apk --no-cache add git make
 COPY --from=pre /usr/bin/minify /usr/bin/minify
 WORKDIR /nothingtodo
 RUN mkdir -p /nothingtodo/data && chown 65534:65534 /nothingtodo/data
 ADD . /nothingtodo
 RUN go mod download \
-    && make minify \
+    && make minify MINIFY_INPLACE=1 \
     && make build
 
 # runtime

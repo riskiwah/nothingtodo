@@ -4,11 +4,11 @@ COMMIT_HASH=$(shell git rev-parse --short HEAD)
 BUILD_TIMESTAMP=$(shell date '+%Y-%m-%dT%H:%M:%S')
 YEAR=$(shell date '+%Y')
 
-LDFLAGS := -s -w -v -X 'main.commit=$(COMMIT_HASH)' \
+LDFLAGS := -s -w -X 'main.commit=$(COMMIT_HASH)' \
 		   -X 'main.buildTimestamp=$(BUILD_TIMESTAMP)' \
 		   -X 'main.year=$(YEAR)'
 
-.PHONY: help
+.PHONY: all help clean build build_container run minify
 
 all: clean build run
 
@@ -16,10 +16,10 @@ help:  ## Show help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 clean: ## clean build
-	@rm $(BUILD_DIR)/$(MAIN_BIN)
+	@rm -f $(BUILD_DIR)/$(MAIN_BIN)
 
 build: ## build binary
-	@CGO_ENABLED=0 go build -gcflags=all="-l -B -C" -ldflags="$(LDFLAGS)" -o dist/nothingtodo main.go
+	@CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(MAIN_BIN) main.go
 
 build_container: ## build container amd64
 	@docker build -t nothingtodo .
@@ -27,6 +27,8 @@ build_container: ## build container amd64
 run: ## run binary
 	$(BUILD_DIR)/$(MAIN_BIN)
 
-minify: ## minify static
+# Overwrites static/ in place, so it's gated to the Docker build (MINIFY_INPLACE=1).
+minify: ## minify static (Docker build only)
+	@[ "$(MINIFY_INPLACE)" = 1 ] || { echo "minify rewrites static/ in place; run via Docker build or MINIFY_INPLACE=1"; exit 1; }
 	@minify static/index.html -o static/index.html
 	@minify static/styles.css -o static/styles.css

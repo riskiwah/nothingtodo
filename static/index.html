@@ -8,7 +8,7 @@
     <link rel="shortcut icon" type="image/png"
         href="favicon.ico">
     <title>~/riskiwah</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v={{ .Footer.CommitHash }}">
 </head>
 
 <body>
@@ -16,14 +16,13 @@
         <h1 id="riskiwah">~/riskiwah</h1>
         <hr>
         <p><strong>Hi, and welcome!</strong></p>
-        <p>Thanks for visting this page. Browse around using the <a href="#menu">Menu ↩</a>.</p>
+        <p>Thanks for visiting this page. Browse around using the <a href="#menu">Menu ↩</a>.</p>
         <p>This is a rather empty site, for now.</p>
         <h2>Hosted from this small <em>"Orange Pi Zero 2"</em></h2>
-        <img src="images/opizero2-dither.png" loading="lazy">
+        <img src="images/opizero2-dither.png" alt="Dithered photo of the Orange Pi Zero 2 board" width="480" height="360" loading="lazy">
         <h2 id="status">Status</h2>
-        <pre id="uptime-status" tabindex="1" class="uptime">{{ .StatusJSON }}</pre>
+        <pre id="uptime-status" class="uptime">{{ .StatusJSON }}</pre>
         <h2 id="menu">Menu</h2>
-        <p>
             <ul>
                 <li><a href="https://blog.riskiwah.xyz/" target="_blank">blog</a></li>
                 <li><a href="https://portfolio.pixelfed.social/riskiwah" target="_blank">photos</a></li>
@@ -31,7 +30,6 @@
                 <li><a href="/ip" target="_blank">/ip</a></li>
                 <li><a href="/pasaran" target="_blank">/pasaran</a></li>
             </ul>
-        </p>
         <h4 id="inspiration">Inspiration of this site</h4>
             <ul>
                 <li><a href="https://solar.lowtechmagazine.com/" target="_blank"
@@ -47,16 +45,23 @@
         </strong></p>
         <script>
             console.log("Booo!!, I Hack'ed u! 🐻")
+            // Non-2xx (e.g. Cloudflare 52x while the Pi is down) keeps the last good status.
             setInterval(function() {
-                fetch('/status-fragment').then(function(r) { return r.text(); }).then(function(html) {
-                    document.getElementById('uptime-status').outerHTML = html;
-                });
+                if (document.hidden) return;
+                fetch('/status').then(function(r) {
+                    if (!r.ok) throw new Error(r.status);
+                    return r.text();
+                }).then(function(text) {
+                    document.getElementById('uptime-status').textContent = text;
+                }).catch(function() {});
             }, 60000);
         </script>
         <hr>
         <footer>
             <small>© {{.Footer.Year}} <a href="mailto:riskiwah@yandex.com">~/riskiwah</a> · <em>Generated at:
-                    <time timestamp="{{.Footer.BuildTimestamp}}">{{.Footer.BuildTimestamp}}</time> · Commit: {{ .Footer.CommitHash }}</em>
+                    <time datetime="{{.Footer.BuildTimestamp}}">{{.Footer.BuildTimestamp}}</time> · Commit: {{ .Footer.CommitHash }}</em>
             </small>
         </footer>
     </div>
+</body>
+</html>
