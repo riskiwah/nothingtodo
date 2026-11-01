@@ -381,14 +381,16 @@ var inlineScriptRe = regexp.MustCompile(`(?s)<script>(.*?)</script>`)
 // served, including after the Docker build minifies the page. Inline scripts
 // must not contain template actions, or the hash would change per request.
 // script-src 'self' covers Cloudflare's same-origin email-decode script.
+// The cloudflareinsights hosts are for the Web Analytics beacon Cloudflare
+// injects at the edge: the script loads from static., then reports to the apex.
 func buildCSP(page []byte) string {
-	scriptSrc := "'self'"
+	scriptSrc := "'self' https://static.cloudflareinsights.com"
 	for _, m := range inlineScriptRe.FindAllSubmatch(page, -1) {
 		sum := sha256.Sum256(m[1])
 		scriptSrc += " 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
 	}
 	return "default-src 'none'; script-src " + scriptSrc +
-		"; style-src 'self'; img-src 'self'; connect-src 'self'" +
+		"; style-src 'self'; img-src 'self'; connect-src 'self' https://cloudflareinsights.com" +
 		"; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 }
 
